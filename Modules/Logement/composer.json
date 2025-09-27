@@ -1,0 +1,31 @@
+{
+    "name": "nwidart/logement",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Logement\\": "",
+            "Modules\\Logement\\App\\": "app/",
+            "Modules\\Logement\\Database\\Factories\\": "database/factories/",
+            "Modules\\Logement\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Logement\\Tests\\": "tests/"
+        }
+    }
+}

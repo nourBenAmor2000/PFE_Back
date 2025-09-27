@@ -1,0 +1,11 @@
+{
+    "name": "PaymentContracts",
+    "alias": "paymentcontracts",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\PaymentContracts\\App\\Providers\\PaymentContractsServiceProvider"
+    ],
+    "files": []
+}

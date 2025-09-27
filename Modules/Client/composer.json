@@ -1,0 +1,32 @@
+{
+    "name": "nwidart/client",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Client\\": "",
+            "Modules\\Client\\App\\": "app/",
+            "Modules\\Client\\Database\\Factories\\": "database/factories/",
+            "Modules\\Client\\Database\\Seeders\\": "database/seeders/",
+            "Modules\\Agent\\App\\": "Modules/Agent/App/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Client\\Tests\\": "tests/"
+        }
+    }
+}

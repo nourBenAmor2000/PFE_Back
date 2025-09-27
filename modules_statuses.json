@@ -1,0 +1,17 @@
+{
+    "Admin": true,
+    "Blog": true,
+    "User": true,
+    "Auth": true,
+    "Client": true,
+    "Agency": true,
+    "Agent": true,
+    "Attribute": true,
+    "Logement": true,
+    "SubCategory": true,
+    "Category": true,
+    "Contract": true,
+    "Visit": true,
+    "Review": true,
+    "PaymentContracts": true
+}

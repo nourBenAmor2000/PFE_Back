@@ -1,0 +1,11 @@
+{
+    "name": "Logement",
+    "alias": "logement",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Logement\\App\\Providers\\LogementServiceProvider"
+    ],
+    "files": []
+}
