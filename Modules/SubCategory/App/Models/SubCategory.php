@@ -5,7 +5,7 @@ namespace Modules\SubCategory\App\Models;
 use MongoDB\Laravel\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\SubCategory\Database\factories\SubCategoryFactory;
-
+use Modules\Category\App\Models\Category; 
 class SubCategory extends Model
 {
     use HasFactory;
