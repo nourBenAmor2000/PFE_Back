@@ -206,7 +206,7 @@ class ClientController extends Controller
             'username' => 'required|string|max:255|unique:clients',
             'email' => 'required|string|email|max:255|unique:clients',
             'password' => 'required|string|min:8',
-            'phone' => 'nullable|string|max:20',
+            'phone' => 'nullable|string|max:20'
         ]);
 
         $client = Client::create([
@@ -215,6 +215,8 @@ class ClientController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'phone' => $request->phone,
+            'role'     => Client::ROLE_Client, // <-- force "Client"
+
         ]);
 
         // Solution 1: Envoi direct sans event

@@ -22,10 +22,14 @@ class Client extends Authenticatable implements JWTSubject, MustVerifyEmail, Can
     /**
      * The attributes that are mass assignable.
      */
-    protected $fillable = ['name', 'username', 'email', 'password', 'phone'];
+    protected $fillable = ['name', 'username', 'email', 'password', 'phone','role'];
     protected $casts = ['_id' => 'string'];
     protected $hidden = ['password', 'remember_token'];
-
+    public const ROLE_Client = 'Client';
+public function scopeClient($query)
+    {
+        return $query->where('role', self::ROLE_Client);
+    }
 
     public function visits()
 {
