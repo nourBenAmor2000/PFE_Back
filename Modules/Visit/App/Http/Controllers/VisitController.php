@@ -112,4 +112,30 @@ class VisitController extends Controller
 
         return response()->json(['success'=>true,'message'=>'Visite supprimée avec succès']);
     }
+
+    public function indexByAgency(): \Illuminate\Http\JsonResponse
+{
+    $agencyId = auth('agent')->user()->agency_id;
+
+    $visits = \Modules\Visit\App\Models\Visit::whereHas('logement', function($q) use($agencyId) {
+        $q->where('agency_id', $agencyId);
+    })->get();
+
+    return response()->json(['success'=>true, 'visits'=>$visits]);
+}
+
+public function showScoped($id): \Illuminate\Http\JsonResponse
+{
+    $agencyId = auth('agent')->user()->agency_id;
+
+    $visit = \Modules\Visit\App\Models\Visit::where('_id', $id)
+        ->whereHas('logement', function($q) use($agencyId) {
+            $q->where('agency_id', $agencyId);
+        })->first();
+
+    if (!$visit) return response()->json(['error'=>'Visite non trouvée'],404);
+
+    return response()->json(['success'=>true, 'visit'=>$visit]);
+}
+
 }

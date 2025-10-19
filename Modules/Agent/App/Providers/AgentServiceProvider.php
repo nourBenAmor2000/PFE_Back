@@ -4,6 +4,8 @@ namespace Modules\Agent\App\Providers;
 
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Routing\Router;
+use Modules\Agent\App\Http\Middleware\EnsureAgentRole;
 
 class AgentServiceProvider extends ServiceProvider
 {
@@ -22,6 +24,8 @@ class AgentServiceProvider extends ServiceProvider
         $this->registerConfig();
         $this->registerViews();
         $this->loadMigrationsFrom(module_path($this->moduleName, 'Database/migrations'));
+        // $router->aliasMiddleware('agent.role', EnsureAgentRole::class);
+         $this->app['router']->aliasMiddleware('agent.role', EnsureAgentRole::class);
     }
 
     /**
