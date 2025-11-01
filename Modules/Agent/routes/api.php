@@ -44,13 +44,13 @@ Route::prefix('email')->group(function() {
 /**
      * ADMIN AGENCE ou RH : CRUD sur les comptes Agents
      */
-    Route::middleware(['auth:agent', 'agent.role:admin_agence,rh'])->group(function () {
-        Route::get('/agents', [AgentController::class, 'listAgents']);
-        Route::post('/agents', [AgentController::class, 'store']);
-        Route::get('/agents/{id}', [AgentController::class, 'show']);
-        Route::put('/agents/{id}', [AgentController::class, 'updateAgent']);
-        Route::delete('/agents/{id}', [AgentController::class, 'destroyAgent']);
-    });
+    // Route::middleware(['auth:agent', 'agent.role:admin_agence,rh'])->group(function () {
+    //     Route::get('/agents', [AgentController::class, 'listAgents']);
+    //     Route::post('/agents', [AgentController::class, 'store']);
+    //     Route::get('/agents/{id}', [AgentController::class, 'show']);
+    //     Route::put('/agents/{id}', [AgentController::class, 'updateAgent']);
+    //     Route::delete('/agents/{id}', [AgentController::class, 'destroyAgent']);
+    // });
 
     /**
      * AGENT PERSONNEL : CRUD Logement, Contrat, Visit
