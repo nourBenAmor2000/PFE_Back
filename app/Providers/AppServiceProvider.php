@@ -12,7 +12,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(\App\Contracts\AIAssistantContract::class, \App\Services\Assistant\AIAssistant::class);
     }
 
     /**

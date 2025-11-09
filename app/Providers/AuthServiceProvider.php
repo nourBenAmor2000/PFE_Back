@@ -8,11 +8,13 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Modules\Client\App\Models\Client;
+use Modules\Visit\App\Models\Visit;                 // adapte le namespace
+use App\Policies\VisitPolicy;
 
 class AuthServiceProvider extends ServiceProvider
 {
     protected $policies = [
-        // Model => Policy mappings
+    Visit::class => VisitPolicy::class,
     ];
 
     public function boot(): void

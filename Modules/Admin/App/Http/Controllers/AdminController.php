@@ -145,27 +145,18 @@ private function ensureAdminAuthenticated(): ?\Illuminate\Http\JsonResponse
  */
 public function agenciesIndex(Request $request): \Illuminate\Http\JsonResponse
 {
+    // Ensure admin is authenticated
     if ($resp = $this->ensureAdminAuthenticated()) return $resp;
 
-    $q = \Modules\Agency\App\Models\Agency::query();
-
-    // Filtres optionnels
-    if ($request->filled('search')) {
-        $q->where('name', 'like', '%'.$request->search.'%');
-    }
-    if ($request->filled('city')) {
-        $q->where('city', $request->city);
-    }
-
-    // Pagination (par défaut 20)
-    $perPage = (int) $request->get('per_page', 20);
-    $data = $q->orderBy('_id', 'desc')->paginate($perPage);
+    // ✅ Get all agencies without filters or pagination
+    $agencies = \Modules\Agency\App\Models\Agency::orderBy('_id', 'desc')->get();
 
     return response()->json([
         'success'  => true,
-        'agencies' => $data,
+        'agencies' => $agencies,
     ]);
 }
+
 
 /**
  * POST /admin/agencies
@@ -271,31 +262,18 @@ public function agenciesDestroy(string $id): \Illuminate\Http\JsonResponse
 // GET /admin/agents  (liste + filtres)
 public function agentsIndex(Request $request): \Illuminate\Http\JsonResponse
 {
+    // Ensure admin is authenticated
     if ($resp = $this->ensureAdminAuthenticated()) return $resp;
 
-    $q = Agent::query();
+    // ✅ Get all agents (no filters, no pagination)
+    $agents = Agent::orderBy('_id', 'desc')->get();
 
-    // Filtres optionnels
-    if ($request->filled('search')) {
-        $s = $request->search;
-        $q->where(function($qq) use ($s) {
-            $qq->where('name','like','%'.$s.'%')
-               ->orWhere('email','like','%'.$s.'%')
-               ->orWhere('phone','like','%'.$s.'%');
-        });
-    }
-    if ($request->filled('role')) {
-        $q->where('role', $request->role); // admin_agence | rh | agent
-    }
-    if ($request->filled('agency_id')) {
-        $q->where('agency_id', $request->agency_id);
-    }
-
-    $perPage = (int) $request->get('per_page', 20);
-    $data = $q->orderBy('_id', 'desc')->paginate($perPage);
-
-    return response()->json(['success'=>true, 'agents'=>$data]);
+    return response()->json([
+        'success' => true,
+        'agents' => $agents
+    ]);
 }
+
 
 // POST /admin/agents  (créer)
 public function agentsStore(Request $request): \Illuminate\Http\JsonResponse
@@ -583,23 +561,13 @@ public function clientsIndex(Request $request): \Illuminate\Http\JsonResponse
 {
     if ($resp = $this->ensureAdminAuthenticated()) return $resp;
 
-    $q = Client::query();
+    // Get all clients without filters or pagination
+    $clients = Client::orderBy('_id', 'desc')->get();
 
-    // Filtres optionnels
-    if ($request->filled('search')) {
-        $s = $request->search;
-        $q->where(function($qq) use ($s) {
-            $qq->where('name', 'like', '%'.$s.'%')
-               ->orWhere('username', 'like', '%'.$s.'%')
-               ->orWhere('email', 'like', '%'.$s.'%')
-               ->orWhere('phone', 'like', '%'.$s.'%');
-        });
-    }
-
-    $perPage = (int) $request->get('per_page', 20);
-    $data = $q->orderBy('_id', 'desc')->paginate($perPage);
-
-    return response()->json(['success'=>true, 'clients'=>$data]);
+    return response()->json([
+        'success' => true,
+        'clients' => $clients
+    ]);
 }
 
 // POST /admin/clients  (créer)

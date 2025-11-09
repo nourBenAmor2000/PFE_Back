@@ -47,7 +47,7 @@ class ClientController extends Controller
             'name' => 'required|string|max:255',
             'username' => 'required|string|max:255|unique:clients',
             'email' => 'required|string|email|max:255|unique:clients',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => 'required|string|min:8',
             'phone' => 'nullable|string|max:20',
         ]);
 
@@ -105,7 +105,7 @@ class ClientController extends Controller
             'name' => 'sometimes|string|max:255',
             'username' => 'sometimes|string|max:255|unique:clients,username,' . $client->id,
             'email' => 'sometimes|string|email|max:255|unique:clients,email,' . $client->id,
-            'password' => 'nullable|string|min:8|confirmed',
+            'password' => 'nullable|string|min:8',
             'phone' => 'nullable|string|max:20',
         ]);
 
