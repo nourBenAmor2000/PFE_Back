@@ -17,9 +17,18 @@ use Modules\Visit\App\Http\Controllers\VisitController;
     |
 */
 
-// Route::middleware(['auth:sanctum'])->prefix('v1')->name('api.')->group(function () {
-//     Route::get('agency', fn (Request $request) => $request->user())->name('agency');
-// });
+
+
+// ✅ Public: seulement index (liste) pour l'inscription
+Route::get('/agencies', [AgencyController::class, 'index']);
+
+// ✅ Protégé: CRUD complet dans /api/v1/agencies (admin agence / RH)
+Route::middleware(['auth:agent', 'agent.role:admin_agence,rh'])
+    ->prefix('v1')
+    ->group(function () {
+        Route::apiResource('agencies', AgencyController::class);
+    });
+
 Route::middleware(['auth:agent', 'agent.role:admin_agence,rh'])->prefix('v1')->group(function () {
     Route::apiResource('agencies', AgencyController::class);
 });

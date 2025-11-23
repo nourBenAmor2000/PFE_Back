@@ -4,7 +4,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Modules\Visit\App\Http\Controllers\VisitController;
 
-Route::apiResource('visits', VisitController::class);
+// Route::apiResource('visits', VisitController::class);
+
+// Protected routes - require authentication and appropriate role
+Route::middleware(['auth:admin,agent'])->group(function () {
+    Route::apiResource('visits', VisitController::class);
+});
+
 /*
     |--------------------------------------------------------------------------
     | API Routes

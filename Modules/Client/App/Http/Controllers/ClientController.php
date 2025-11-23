@@ -12,7 +12,11 @@ use Illuminate\Support\Facades\Hash;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Modules\Client\App\Models\Client;
 use Tymon\JWTAuth\Exceptions\JWTException;
-
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 class ClientController extends Controller
 {
     /**
@@ -194,11 +198,10 @@ class ClientController extends Controller
     
 
 
-
     /**
      * Enregistrement d'un nouveau client
      */
-    public function register(Request $request): JsonResponse
+        public function register(Request $request): JsonResponse
 {
     try {
         $request->validate([
@@ -209,29 +212,32 @@ class ClientController extends Controller
             'phone' => 'nullable|string|max:20'
         ]);
 
-        $client = Client::create([
-            'name' => $request->name,
-            'username' => $request->username,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'phone' => $request->phone,
-            'role'     => Client::ROLE_Client, // <-- force "Client"
-
-        ]);
-
-        // Solution 1: Envoi direct sans event
+        // Create client WITHOUT triggering any events
+        $client = new Client();
+        $client->name = $request->name;
+        $client->username = $request->username;
+        $client->email = $request->email;
+        $client->password = Hash::make($request->password);
+        $client->phone = $request->phone;
+        $client->role = Client::ROLE_Client;
+        $client->save(); // Save without events
+        
+        // IMPORTANT: Send ONLY email verification notification
+        // DO NOT send password reset notification during registration
+        // DO NOT trigger Registered event which might send default Laravel emails
         $client->sendEmailVerificationNotification();
+        
+        // Log to verify only one email is sent
+        \Log::info('Registration: Only verification email sent for client: ' . $client->email);
 
-        // OU Solution 2: Avec event (doit être configuré correctement)
-        // event(new \Illuminate\Auth\Events\Registered($client));
-
-        $token = JWTAuth::fromUser($client);
+        // DO NOT return token - user must verify email first
+        // $token = JWTAuth::fromUser($client);
 
         return response()->json([
             'success' => true,
-            'message' => 'Client registered successfully. Verification email sent.',
+            'message' => 'Client registered successfully. Please check your email for the verification code.',
             'client' => $client,
-            'token' => $token,
+            // 'token' => $token, // Removed - user must verify email first
         ], 201);
 
     } catch (\Exception $e) {
@@ -243,6 +249,8 @@ class ClientController extends Controller
         ], 500);
     }
 }
+
+
 
     /**
      * Connexion du client
@@ -349,4 +357,68 @@ class ClientController extends Controller
             ], 500);
         }
     }
+  
+public function sendResetLinkEmail(Request $request): JsonResponse
+{
+    $request->validate([
+        'email' => 'required|email',
+    ]);
+
+    // ⚠️ IMPORTANT : broker "clients" doit exister dans config/auth.php -> passwords
+    $status = Password::broker('clients')->sendResetLink(
+        $request->only('email')
+    );
+
+    \Log::info('Client password reset status', [
+        'email'  => $request->email,
+        'status' => $status,
+    ]);
+
+    // ✅ Toujours 200
+    return response()->json([
+        'success' => $status === Password::RESET_LINK_SENT,
+        'status'  => $status,
+        'message' => __($status),
+    ], 200);
 }
+
+    /**
+     * Appliquer le nouveau mot de passe (CLIENT)
+     */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token'    => 'required',
+            'email'    => 'required|email',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $status = Password::broker('clients')->reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (Client $client, string $password) {
+                $client->forceFill([
+                    'password'       => Hash::make($password),
+                    'remember_token' => Str::random(60),
+                ])->save();
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            return response()->json([
+                'success' => true,
+                'message' => __($status),
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => __($status),
+        ], 400);
+    }
+
+    /**
+     * Appliquer le nouveau mot de passe (client)
+     */
+    
+}
+

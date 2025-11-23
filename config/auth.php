@@ -138,12 +138,25 @@ return [
         ],
         
         'clients' => [
-        'provider' => 'clients',
-        'table' => 'password_resets', // Table de stockage des tokens
-        'expire' => 60, // Expiration en minutes
-        'throttle' => 60, // Limite de tentatives
-         ],
-    
+            'provider' => 'clients',
+            'table' => 'password_resets', // Table de stockage des tokens
+            'expire' => 60, // Expiration en minutes
+            'throttle' => 60, // Limite de tentatives
+        ],
+        
+        'admins' => [
+            'provider' => 'admins',
+            'table' => 'password_resets', // Table de stockage des tokens
+            'expire' => 60, // Expiration en minutes
+            'throttle' => 60, // Limite de tentatives
+        ],
+        
+        'agents' => [
+            'provider' => 'agents',
+            'table' => 'password_resets', // Table de stockage des tokens
+            'expire' => 60, // Expiration en minutes
+            'throttle' => 60, // Limite de tentatives
+        ],
     ],
 
     /*
@@ -162,4 +175,34 @@ return [
     'verification' => [
     'expire' => 1440, // Minutes avant expiration du lien
 ],
+/*
+    |--------------------------------------------------------------------------
+    | Password reset brokers
+    |--------------------------------------------------------------------------
+    */
+    'passwords' => [
+
+        'clients' => [
+            'provider' => 'clients',                // ⚠️ EXACTEMENT le même nom
+            'table'    => 'password_resets_tokens',
+            'expire'   => 60,
+            'throttle' => 60,
+        ],
+
+        'agents' => [
+            'provider' => 'agents',                 // ⚠️ EXACTEMENT le même nom
+            'table'    => 'password_resets_tokens',
+            'expire'   => 60,
+            'throttle' => 60,
+        ],
+
+        'admins' => [
+            'provider' => 'admins',
+            'table'    => 'password_resets_tokens',
+            'expire'   => 60,
+            'throttle' => 60,
+        ],
+    ],
+
+    
 ];

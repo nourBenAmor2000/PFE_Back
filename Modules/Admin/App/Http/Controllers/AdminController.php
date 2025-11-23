@@ -39,21 +39,25 @@ public function register(Request $request): JsonResponse
     ]);
 
     try {
-        // Création de l'admin
-        $admin = Admin::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => bcrypt($request->password),
-        ]);
+        // Create admin WITHOUT triggering any events
+        $admin = new Admin();
+        $admin->name = $request->name;
+        $admin->email = $request->email;
+        $admin->password = bcrypt($request->password);
+        $admin->save(); // Save without events
 
-        // Génération du token JWT
-        $token = Auth::guard('admin')->login($admin);
+        // IMPORTANT: Send ONLY email verification notification
+        // DO NOT send password reset notification during registration
+        $admin->sendEmailVerificationNotification();
+
+        // DO NOT return token - user must verify email first
+        // $token = Auth::guard('admin')->login($admin);
 
         return response()->json([
             'success' => true,
-            'message' => 'Admin registered successfully',
-            'token' => $token,
+            'message' => 'Admin registered successfully. Please check your email for the verification code.',
             'admin' => $admin
+            // 'token' => $token, // Removed - user must verify email first
         ], 201);
 
     } catch (\Exception $e) {
@@ -63,6 +67,8 @@ public function register(Request $request): JsonResponse
         ], 500);
     }
 }
+
+
 
 
     public function login(Request $request): JsonResponse
@@ -1475,6 +1481,19 @@ public function visitsDestroy(string $id): \Illuminate\Http\JsonResponse
         'message'=>'Visite supprimée avec succès'
     ]);
 }
+/**
+ * GET /admin/agencies/public
+ * Liste toutes les agences (PUBLIC - pour l'inscription)
+ */
+public function agenciesIndexPublic(Request $request): \Illuminate\Http\JsonResponse
+{
+    // ✅ Get all agencies without filters or pagination (public access)
+    $agencies = \Modules\Agency\App\Models\Agency::orderBy('_id', 'desc')->get();
 
+    return response()->json([
+        'success'  => true,
+        'agencies' => $agencies,
+    ]);
+}
 
 }

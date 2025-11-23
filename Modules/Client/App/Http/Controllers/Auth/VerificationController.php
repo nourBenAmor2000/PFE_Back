@@ -10,25 +10,60 @@ use Illuminate\Auth\Events\Verified;
 class VerificationController extends Controller
 {
     /**
-     * Mark the authenticated user's email address as verified.
+     * Verify email using verification code.
      */
-    public function verify(Request $request, $id, $hash)
+    public function verify(Request $request)
     {
-        $client = Client::findOrFail($id);
+        $request->validate([
+            'email' => 'required|email',
+            'code' => 'required|string|size:6',
+        ]);
 
-        if (!hash_equals((string) $hash, sha1($client->getEmailForVerification()))) {
-            abort(403, 'Invalid verification link');
+        $client = Client::where('email', $request->email)->first();
+
+        if (!$client) {
+            return response()->json([
+                'success' => false,
+                'error' => 'User not found'
+            ], 404);
         }
 
         if ($client->hasVerifiedEmail()) {
-            return response()->json(['message' => 'Email already verified']);
+            return response()->json([
+                'success' => false,
+                'error' => 'Email already verified'
+            ], 400);
         }
 
+        // Check if code matches and is not expired
+        if (!$client->verification_code || $client->verification_code !== $request->code) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Invalid verification code'
+            ], 400);
+        }
+
+        if ($client->verification_code_expires_at && $client->verification_code_expires_at->isPast()) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Verification code has expired'
+            ], 400);
+        }
+
+        // Mark email as verified
         if ($client->markEmailAsVerified()) {
+            // Clear verification code
+            $client->verification_code = null;
+            $client->verification_code_expires_at = null;
+            $client->save();
+            
             event(new Verified($client));
         }
 
-        return response()->json(['message' => 'Email successfully verified']);
+        return response()->json([
+            'success' => true,
+            'message' => 'Email successfully verified'
+        ]);
     }
 
     /**
@@ -39,11 +74,17 @@ class VerificationController extends Controller
         $client = $request->user('client');
 
         if ($client->hasVerifiedEmail()) {
-            return response()->json(['message' => 'Email already verified'], 400);
+            return response()->json([
+                'success' => false,
+                'error' => 'Email already verified'
+            ], 400);
         }
 
         $client->sendEmailVerificationNotification();
 
-        return response()->json(['message' => 'Verification link resent']);
+        return response()->json([
+            'success' => true,
+            'message' => 'Verification code sent to your email'
+        ]);
     }
 }

@@ -28,11 +28,22 @@ final class QueryInterpreter
      */
     public function interpret(string $userQuery, string $provider = 'openrouter'): array
     {
-        // 1) Tentative via LLM
+        // 1) Tentative via LLM avec prompt amélioré
         try {
-            $system = 'Tu extrais un intent JSON pour des requêtes de gestion immobilière.';
-            $user   = "Analyse la requête et retourne uniquement un JSON avec: {type, entity, filters, timeframe, aggregation}.\n\nRequête: \"{$userQuery}\"";
-            $raw    = $this->ai->chat($system, $user, $provider);
+            $system = <<<PROMPT
+Tu es un expert en extraction d'intent pour un système de gestion immobilière.
+Analyse la requête utilisateur et extrais un intent JSON structuré.
+
+Entités possibles: visit, logement, client, contrat, payment, review, agency, analytics, agent, category
+Types possibles: list, count, find, analyze, compare, aggregate
+Timeframes: today, week, month, year, all
+Filtres: status, price_min, price_max, city, agency_id, category_id, rating_min, rating_max, free
+
+Retourne UNIQUEMENT un JSON valide avec: {type, entity, filters, timeframe, aggregation, action}
+PROMPT;
+            
+            $user = "Analyse cette requête et retourne uniquement un JSON:\n\nRequête: \"{$userQuery}\"\n\nJSON:";
+            $raw = $this->ai->chat($system, $user, $provider);
 
             if (preg_match('/\{[\s\S]*\}/', $raw, $m)) {
                 /** @var array<string,mixed> $json */
@@ -44,32 +55,8 @@ final class QueryInterpreter
             // ignore → fallback
         }
 
-        // 2) Fallback heuristique
+        // 2) Fallback heuristique amélioré
         return $this->fallback($userQuery);
-        $t = mb_strtolower($text);
-
-// --- CONTRATS ---
-if (str_contains($t, 'contrat')) {
-
-    // expirant bientôt -> dans 30 jours
-    if (str_contains($t, 'expire') || str_contains($t, 'expirent') || str_contains($t, 'bientôt')) {
-        return ['entity' => 'contrat', 'name' => 'expiring_next_30d'];
-    }
-
-    // signés ce mois-ci
-    if ((str_contains($t, 'ce mois') || str_contains($t, 'mois-ci')) && (str_contains($t, 'sign'))) {
-        return ['entity' => 'contrat', 'name' => 'signed_this_month'];
-    }
-
-    // en attente de signature
-    if (str_contains($t, 'attente') && str_contains($t, 'signature')) {
-        return ['entity' => 'contrat', 'name' => 'pending_signature'];
-    }
-
-    // fallback contrat
-    return ['entity' => 'contrat', 'name' => 'signed_this_month'];
-}
-
     }
 
     /**
@@ -93,6 +80,7 @@ if (str_contains($t, 'contrat')) {
             'filters'     => isset($i['filters']) && is_array($i['filters']) ? $i['filters'] : [],
             'timeframe'   => isset($i['timeframe']) ? (string) $i['timeframe'] : null,
             'aggregation' => isset($i['aggregation']) ? (string) $i['aggregation'] : null,
+            'action'      => isset($i['action']) ? (string) $i['action'] : null,
             'confidence'  => isset($i['confidence']) ? (float) $i['confidence'] : 0.7,
         ];
     }
@@ -110,66 +98,153 @@ if (str_contains($t, 'contrat')) {
      * }
      */
     private function fallback(string $query, ?\Illuminate\Contracts\Auth\Authenticatable $user = null): array
-{
-        // app/Services/Assistant/QueryInterpreter.php
- $t = mb_strtolower($query);
-// --- CONTRATS en priorité ---
-if (str_contains($t, 'contrat')) {
-
-    if ( (str_contains($t, 'expire') || str_contains($t, 'expirent') || str_contains($t, 'bientôt') || str_contains($t, 'bientot')) ) {
-        return ['entity' => 'contrat', 'name' => 'expiring_next_30d'];
-    }
-
-    if ( (str_contains($t, 'ce mois') || str_contains($t, 'mois-ci') || str_contains($t, 'mois ci'))
-         && (str_contains($t, 'sign') || str_contains($t, 'signés') || str_contains($t, 'signes')) ) {
-        return ['entity' => 'contrat', 'name' => 'signed_this_month'];
-    }
-
-    if (str_contains($t, 'attente') && str_contains($t, 'signature')) {
-        return ['entity' => 'contrat', 'name' => 'pending_signature'];
-    }
-
-    // fallback
-    return ['entity' => 'contrat', 'name' => 'signed_this_month'];
-}
-
-        $l = mb_strtolower($q);
-
-        // entity
-        $entity = 'logement';
-        if (str_contains($l, 'client')) {
-            $entity = 'client';
-        } elseif (str_contains($l, 'visite') || str_contains($l, 'visit')) {
-            $entity = 'visit';
-        } elseif (str_contains($l, 'factur') || str_contains($l, 'revenu') || str_contains($l, 'paiement')) {
-            $entity = 'billing';
-        }
-
-        // type
-        $type = 'list';
-        if (str_contains($l, 'combien') || str_contains($l, 'how many') || str_contains($l, 'count')) {
-            $type = 'count';
-        } elseif (str_contains($l, 'trouve') || str_contains($l, 'find') || str_contains($l, 'search')) {
-            $type = 'find';
-        } elseif (str_contains($l, 'analyse') || str_contains($l, 'résumé') || str_contains($l, 'summary')) {
-            $type = 'analyze';
-        }
-
-        // filters / timeframe
+    {
+        $t = mb_strtolower(trim($query));
         $filters = [];
-        if (str_contains($l, 'actif')) {
+        $timeframe = null;
+        $type = 'list';
+        $action = null;
+        
+        // --- Détection de timeframe améliorée ---
+        if (str_contains($t, "aujourd'hui") || str_contains($t, 'aujourdhui') || str_contains($t, 'today')) {
+            $timeframe = 'today';
+        } elseif (str_contains($t, 'semaine') || str_contains($t, 'week') || str_contains($t, '7 jours')) {
+            $timeframe = 'week';
+        } elseif (str_contains($t, 'mois') || str_contains($t, 'month') || str_contains($t, 'mensuel')) {
+            $timeframe = 'month';
+        } elseif (str_contains($t, 'année') || str_contains($t, 'year') || str_contains($t, 'annuel')) {
+            $timeframe = 'year';
+        } elseif (str_contains($t, 'trimestre') || str_contains($t, 'quarter')) {
+            $timeframe = 'quarter';
+        }
+        
+        // --- Détection de type améliorée ---
+        if (str_contains($t, 'combien') || str_contains($t, 'how many') || str_contains($t, 'count') || 
+            str_contains($t, 'nombre') || str_contains($t, 'total')) {
+            $type = 'count';
+        } elseif (str_contains($t, 'trouve') || str_contains($t, 'find') || str_contains($t, 'search') ||
+                   str_contains($t, 'cherche') || str_contains($t, 'liste') || str_contains($t, 'list')) {
+            $type = 'find';
+        } elseif (str_contains($t, 'analyse') || str_contains($t, 'résumé') || str_contains($t, 'summary') ||
+                   str_contains($t, 'statistique') || str_contains($t, 'stat') || str_contains($t, 'rapport')) {
+            $type = 'analyze';
+        } elseif (str_contains($t, 'compare') || str_contains($t, 'comparer') || str_contains($t, 'comparaison')) {
+            $type = 'compare';
+        }
+        
+        // --- CONTRATS en priorité ---
+        if (str_contains($t, 'contrat') || str_contains($t, 'contract')) {
+            if (str_contains($t, 'expire') || str_contains($t, 'expirent') || str_contains($t, 'bientôt') || 
+                str_contains($t, 'bientot') || str_contains($t, 'expiring')) {
+                return $this->withDefaults([
+                    'entity' => 'contrat',
+                    'action' => 'expiring_next_30d',
+                    'type' => $type,
+                    'timeframe' => $timeframe,
+                    'filters' => $filters
+                ]);
+            }
+            if ((str_contains($t, 'ce mois') || str_contains($t, 'mois-ci') || str_contains($t, 'mois ci') || str_contains($t, 'this month'))
+                && (str_contains($t, 'sign') || str_contains($t, 'signés') || str_contains($t, 'signes') || str_contains($t, 'signed'))) {
+                return $this->withDefaults([
+                    'entity' => 'contrat',
+                    'action' => 'signed_this_month',
+                    'type' => $type,
+                    'timeframe' => 'month',
+                    'filters' => $filters
+                ]);
+            }
+            if (str_contains($t, 'attente') && (str_contains($t, 'signature') || str_contains($t, 'sign'))) {
+                return $this->withDefaults([
+                    'entity' => 'contrat',
+                    'action' => 'pending_signature',
+                    'type' => $type,
+                    'timeframe' => $timeframe,
+                    'filters' => $filters
+                ]);
+            }
+            return $this->withDefaults([
+                'entity' => 'contrat',
+                'type' => $type,
+                'timeframe' => $timeframe,
+                'filters' => $filters
+            ]);
+        }
+
+        // --- Entity detection améliorée avec priorité ---
+        $entity = 'logement';
+        if ((str_contains($t, 'agence') || str_contains($t, 'agency')) && 
+    (str_contains($t, 'performance') || str_contains($t, 'performant'))) {
+    $entity = 'agency';
+    $type = 'analyze'; // Force analyze type for performance queries
+}
+        // Analytics/Stats en priorité
+        if (str_contains($t, 'statistique') || str_contains($t, 'analyse') || str_contains($t, 'analytics') || 
+            str_contains($t, 'revenu') || str_contains($t, 'revenue') || str_contains($t, 'performance') || 
+            str_contains($t, 'conversion') || str_contains($t, 'marché') || str_contains($t, 'market') || 
+            str_contains($t, 'overview') || str_contains($t, 'global') || str_contains($t, 'dashboard') ||
+            str_contains($t, 'rapport') || str_contains($t, 'report')) {
+            $entity = 'analytics';
+        } elseif (str_contains($t, 'agent') && !str_contains($t, 'agence')) {
+            $entity = 'agent';
+        } elseif (str_contains($t, 'client') || str_contains($t, 'customer') || str_contains($t, 'utilisateur')) {
+            $entity = 'client';
+        } elseif (str_contains($t, 'visite') || str_contains($t, 'visit') || str_contains($t, 'rendez-vous') || str_contains($t, 'rdv')) {
+            $entity = 'visit';
+        } elseif (str_contains($t, 'factur') || str_contains($t, 'paiement') || str_contains($t, 'payment') ||
+                   str_contains($t, 'transaction') || str_contains($t, 'revenu') || str_contains($t, 'revenue')) {
+            $entity = 'payment';
+        } elseif (str_contains($t, 'avis') || str_contains($t, 'review') || str_contains($t, 'commentaire') ||
+                   str_contains($t, 'note') || str_contains($t, 'rating') || str_contains($t, 'évaluation')) {
+            $entity = 'review';
+        } elseif (str_contains($t, 'agence') || str_contains($t, 'agency') || str_contains($t, 'bureau')) {
+            $entity = 'agency';
+        } elseif (str_contains($t, 'logement') || str_contains($t, 'property') || str_contains($t, 'bien') ||
+                   str_contains($t, 'appartement') || str_contains($t, 'maison') || str_contains($t, 'villa')) {
+            $entity = 'logement';
+        } elseif (str_contains($t, 'categorie') || str_contains($t, 'category') || str_contains($t, 'type')) {
+            $entity = 'category';
+        }
+        
+        // --- Filtres améliorés ---
+        // Prix
+        if (preg_match('/prix[^\d]*(\d+)/i', $t, $matches)) {
+            $filters['price_min'] = (int)$matches[1];
+        }
+        if (preg_match('/moins de (\d+)/i', $t, $matches)) {
+            $filters['price_max'] = (int)$matches[1];
+        }
+        if (preg_match('/plus de (\d+)/i', $t, $matches)) {
+            $filters['price_min'] = (int)$matches[1];
+        }
+        
+        // Statut
+        if (str_contains($t, 'disponible') || str_contains($t, 'available') || str_contains($t, 'libre')) {
+            $filters['free'] = true;
+        }
+        if (str_contains($t, 'occupé') || str_contains($t, 'occupied') || str_contains($t, 'loué') || str_contains($t, 'rented')) {
+            $filters['free'] = false;
+        }
+        if (str_contains($t, 'actif') || str_contains($t, 'active')) {
             $filters['status'] = 'active';
         }
-        $timeframe = null;
-        if (str_contains($l, "aujourd'hui") || str_contains($l, 'aujourdhui')) {
-            $timeframe = 'today';
-        } elseif (str_contains($l, 'semaine')) {
-            $timeframe = 'week';
-        } elseif (str_contains($l, 'mois')) {
-            $timeframe = 'month';
+        
+        // Ville/Location
+        if (preg_match('/\b(tunis|sfax|sousse|bizerte|gabes|gafsa|kairouan|monastir|ben arous|ariana)\b/i', $t, $matches)) {
+            $filters['city'] = ucfirst(strtolower($matches[1]));
+        }
+        
+        // Note/Rating
+        if (preg_match('/(\d+)[\s\*]*étoile/i', $t, $matches)) {
+            $filters['rating_min'] = (int)$matches[1];
+        }
+        
+        // Agence
+        if (preg_match('/agence[^\w]*(\w+)/i', $t, $matches)) {
+            $filters['agency_name'] = $matches[1];
         }
 
-        return $this->withDefaults(compact('type', 'entity', 'filters', 'timeframe'));
+        return $this->withDefaults(compact('type', 'entity', 'filters', 'timeframe', 'action'));
     }
     
 }

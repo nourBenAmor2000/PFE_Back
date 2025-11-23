@@ -21,6 +21,7 @@ class UnifiedLoginController extends Controller
         'admin_global'    => '/app/admin',
         'admin_agence'    => '/app/agency',
         'agent_personnel' => '/app/agent',
+        'agent_rh'        => '/app/agent',
         'client'          => '/app/client',
     ];
 
@@ -117,14 +118,16 @@ class UnifiedLoginController extends Controller
 
     /**
      * Normalise les variantes possibles (majuscules/minuscules).
+     * Converts backend role names to frontend role names for consistency.
      */
     protected function normalizeRole(string $role): string
     {
         $r = strtolower(trim($role));
         return match ($r) {
             'admin_global', 'adminglobal', 'global_admin'   => 'admin_global',
-            'admin_agence', 'adminagence', 'agency_admin'   => 'admin_agence',
-            'agent_personnel', 'agentpersonnel', 'agent'    => 'agent_personnel',
+            'admin_agence', 'adminagence', 'agency_admin', 'admin_agent' => 'admin_agence',
+            'agent_personnel', 'agentpersonnel', 'agent', 'personnel' => 'agent_personnel',
+            'agent_rh', 'rh', 'agentrh'                     => 'agent_rh',
             'client', 'customer', 'user'                    => 'client',
             default                                         => 'client',
         };

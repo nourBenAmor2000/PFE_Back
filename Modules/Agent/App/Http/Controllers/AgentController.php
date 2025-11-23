@@ -12,7 +12,11 @@ use Illuminate\Support\Facades\Hash;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Modules\Agent\App\Models\Agent;
 use Tymon\JWTAuth\Exceptions\JWTException;
-
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 class AgentController extends Controller
 {
     /**
@@ -127,50 +131,117 @@ class AgentController extends Controller
 
 
 
-    // Méthode pour l'enregistrement d'un nouvel agent
-    public function register(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:agents',
-            'password' => 'required|string|min:8', // Ajout de la confirmation
-            'phone' => 'nullable|string|max:20',
-            'agency_id' => 'required|string|exists:agencys,_id',
-            'role' => 'required|in:' . implode(',', [Agent::ROLE_AGENT, Agent::ROLE_RH, Agent::ROLE_ADMIN])
+   public function register(Request $request): JsonResponse
+{
+    $validated = $request->validate([
+        'name'      => 'required|string|max:255',
+        'email'     => 'required|string|email|max:255|unique:agents',
+        'password'  => 'required|string|min:8',
+        'phone'     => 'nullable|string|max:20',
+        'agency_id' => 'required|string|exists:agencys,_id',
+        'role'      => 'required|in:' . implode(',', [Agent::ROLE_AGENT, Agent::ROLE_RH, Agent::ROLE_ADMIN])
+    ]);
 
-        ]);
-    
-        try {
-            $agent = Agent::create([
-                'name' => $validated['name'],
-                'email' => $validated['email'],
-                'password' => Hash::make($validated['password']), // Hash correct
-                'phone' => $validated['phone'] ?? null,
-                'agency_id' => $request->agency_id,
-                'role' => $validated['role']
+    try {
+        $agent = new Agent();
+        $agent->name      = $validated['name'];
+        $agent->email     = $validated['email'];
+        $agent->password  = Hash::make($validated['password']);
+        $agent->phone     = $validated['phone'] ?? null;
+        $agent->agency_id = $validated['agency_id'];
+        $agent->role      = $validated['role'];
 
-            ]);
-    
-            $agent->sendEmailVerificationNotification();
-    
-            return response()->json([
-                'success' => true,
-                'message' => 'Agent enregistré avec succès. Email de vérification envoyé.',
-                'agent' => $agent
-            ], 201);
-    
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => "Erreur lors de l'enregistrement",
-                'error' => $e->getMessage()
-            ], 500);
-        }
+        // ✅ Générer et stocker le code + date d’expiration
+        $code = random_int(100000, 999999);
+        $agent->verification_code            = $code;
+        $agent->verification_code_expires_at = now()->addMinutes(30);
+        $agent->email_verified_at              = null;
+
+        $agent->save();
+
+        // ✅ Envoi email (exemple simple)
+        \Mail::raw("Votre code de vérification est : {$code}", function ($message) use ($agent) {
+            $message->to($agent->email)
+                    ->subject('Vérification de votre email - HOMEZ');
+        });
+
+        return response()->json([
+            'success'  => true,
+            'message'  => "Agent enregistré. Un code de vérification a été envoyé à votre adresse email.",
+            'agent'    => [
+                'id'    => $agent->_id,
+                'email' => $agent->email,
+            ],
+            'verify_required' => true,
+        ], 201);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => "Erreur lors de l'enregistrement",
+            'error'   => $e->getMessage()
+        ], 500);
     }
+}
+
+
+public function verifyCode(Request $request): JsonResponse
+{
+    // 1) Validation des données reçues
+    $validated = $request->validate([
+        'email' => 'required|email|exists:agents,email',
+        'code'  => 'required|string|size:6',
+    ]);
+
+    // 2) Récupérer l’agent
+    $agent = Agent::where('email', $validated['email'])->first();
+
+    if (!$agent) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Agent introuvable.',
+        ], 404);
+    }
+
+    // 3) Vérifier que le code existe et n’a pas expiré
+    if (
+        empty($agent->verification_code) ||
+        empty($agent->verification_code_expires_at) ||
+        now()->greaterThan($agent->verification_code_expires_at)
+    ) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Code invalide ou expiré.',
+        ], 422);
+    }
+
+    // 4) Comparer le code (CAST en string pour éviter les problèmes int/string)
+    if ((string)$agent->verification_code !== (string)$validated['code']) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Code invalide ou expiré.',
+        ], 422);
+    }
+
+    // 5) Marquer l’email comme vérifié + nettoyer le code
+    $agent->email_verified_at            = now();
+    $agent->verification_code            = null;
+    $agent->verification_code_expires_at = null;
+    $agent->save();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Email vérifié avec succès.',
+    ]);
+}
+
+
+
+
 
 
     // Méthode pour la connexion (déjà existante)
-    public function login(Request $request): JsonResponse
+   public function login(Request $request): JsonResponse
 {
     $request->validate([
         'email' => 'required|email',
@@ -189,7 +260,13 @@ class AgentController extends Controller
         ], 401);
     }
 
-    \Log::info('Agent trouvé', ['agent_id' => $agent->_id]);
+    // 🔒 Bloquer si email non vérifié
+    if (!$agent->hasVerifiedEmail()) {
+        return response()->json([
+            'success' => false,
+            'error'   => 'Votre email n\'est pas encore vérifié. Veuillez vérifier votre boîte mail.'
+        ], 403);
+    }
 
     if (!Hash::check($request->password, $agent->password)) {
         \Log::warning('Mot de passe incorrect', ['agent_id' => $agent->_id]);
@@ -220,6 +297,7 @@ class AgentController extends Controller
         'agent' => $agent
     ]);
 }
+
     
     // Méthode pour récupérer les informations de l'agent connecté (déjà existante)
     public function me(): JsonResponse
@@ -257,9 +335,6 @@ class AgentController extends Controller
    
 
 
-
-
-    
     // ========== ADMIN AGENCE / RH : Gestion des agents ==========
 
     public function listAgents(): JsonResponse
@@ -292,7 +367,7 @@ class AgentController extends Controller
             'email' => 'required|email|unique:agents,email',
             'password' => 'required|string|min:8|confirmed',
             'phone' => 'nullable|string',
-            'role' => 'required|in:admin_agence,rh,personnel',
+            'role' => 'required|in:' . implode(',', [Agent::ROLE_ADMIN, Agent::ROLE_RH, Agent::ROLE_AGENT]),
         ]);
 
         $agent = Agent::create([
@@ -323,7 +398,7 @@ class AgentController extends Controller
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|unique:agents,email,' . $agent->_id,
             'phone' => 'sometimes|string|max:20',
-            'role' => 'sometimes|in:admin_agence,rh,personnel',
+            'role' => 'sometimes|in:' . implode(',', [Agent::ROLE_ADMIN, Agent::ROLE_RH, Agent::ROLE_AGENT]),
             'password' => 'nullable|string|min:8|confirmed'
         ]);
 
@@ -352,6 +427,95 @@ class AgentController extends Controller
 
         return response()->json(['message' => 'Agent supprimé']);
     }
+public function sendResetLinkEmail(Request $request): JsonResponse
+{
+    // 1) Validation basique
+    $request->validate([
+        'email' => 'required|email',
+    ]);
 
+    try {
+        // 2) On cherche l'agent
+        $agent = Agent::where('email', $request->email)->first();
 
+        // 🔒 Pour ne pas leak si l'email existe ou non:
+        if (!$agent) {
+            Log::warning('Password reset requested for unknown agent email: ' . $request->email);
+
+            // On renvoie OK quand même (comme Laravel)
+            return response()->json([
+                'success' => true,
+                'message' => 'If this email exists, a reset link has been sent.',
+            ], 200);
+        }
+
+        // 3) Générer un token aléatoire
+        $token = Str::random(60);
+
+        // 4) Sauvegarder dans la table password_reset_tokens
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $agent->email],
+            [
+                'email'      => $agent->email,
+                'token'      => Hash::make($token), // comme Laravel
+                'created_at' => Carbon::now(),
+            ]
+        );
+
+        // 5) Envoyer la notification (tu as déjà cette méthode dans le modèle Agent)
+        $agent->sendPasswordResetNotification($token);
+
+        Log::info('Password reset email sent to agent: ' . $agent->email);
+
+        // 6) Réponse front
+        return response()->json([
+            'success' => true,
+            'message' => 'If this email exists, a reset link has been sent.',
+        ], 200);
+
+    } catch (\Exception $e) {
+        Log::error('Error sending agent reset link: ' . $e->getMessage());
+
+        // On renvoie quand même 200 pour ne pas casser le front
+        return response()->json([
+            'success' => false,
+            'message' => 'An error occurred while sending reset link.',
+        ], 200);
+    }
 }
+/**
+     * Appliquer le nouveau mot de passe (Agent)
+     */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token'    => 'required',
+            'email'    => 'required|email',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $status = Password::broker('agents')->reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (Agent $agent, string $password) {
+                $agent->forceFill([
+                    'password'       => Hash::make($password),
+                    'remember_token' => Str::random(60),
+                ])->save();
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            return response()->json([
+                'success' => true,
+                'message' => __($status),
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => __($status),
+        ], 400);
+    }
+    
+}
+
