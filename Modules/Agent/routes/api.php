@@ -2,12 +2,27 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Agent\App\Http\Controllers\AgentController;
-
+use Modules\Logement\App\Http\Controllers\LogementController;
+// Public route to get agencies list (for registration)
+// Vérification email agent par code (PUBLIC)
+Route::post('/agent/verify-code', [AgentController::class, 'verifyCode']);
+Route::post('/agent/register', [AgentController::class, 'register']);
+Route::post('/agent/verify-code', [AgentController::class, 'verifyCode']);
+Route::post('/agent/login',    [AgentController::class, 'login']);
 Route::prefix('agent')->group(function() {
     // Public routes
     Route::post('/register', [AgentController::class, 'register']);
     Route::post('/login', [AgentController::class, 'login'])->name('api.agent.login');;
-    
+      
+
+     // Mot de passe oublié AGENT
+    Route::post('/password/email', [AgentController::class, 'sendResetLinkEmail'])
+        ->name('agent.password.email');
+
+    // ✅ Reset du mot de passe (form + token)
+    Route::post('/password/reset', [AgentController::class, 'resetPassword'])
+        ->name('agent.password.update');
+
     // Protected routes
     Route::middleware('auth:agent')->group(function() {
         Route::get('/me', [AgentController::class, 'me']);
@@ -32,7 +47,21 @@ Route::prefix('email')->group(function() {
         ->middleware(['auth:api'])
         ->name('verification.resend');
 });
+Route::get('/agent/email/verify/{id}/{hash}', function (EmailVerificationRequest $request) {
+    $user = Agent::findOrFail($request->route('id'));
 
+    if (! hash_equals((string) $request->route('hash'), sha1($user->getEmailForVerification()))) {
+        abort(403, 'Invalid verification link.');
+    }
+
+    if ($user->hasVerifiedEmail()) {
+        return response()->json(['message' => 'Email already verified.']);
+    }
+
+    $user->markEmailAsVerified();
+
+    return response()->json(['message' => 'Email verified successfully. You can now login.']);
+})->middleware(['signed'])->name('agent.verification.verify');
 });
 
 // Route::middleware(['auth:agent', 'agent.role:admin_agence,rh'])->group(function () {
@@ -44,18 +73,19 @@ Route::prefix('email')->group(function() {
 /**
      * ADMIN AGENCE ou RH : CRUD sur les comptes Agents
      */
-    Route::middleware(['auth:agent', 'agent.role:admin_agence,rh'])->group(function () {
-        Route::get('/agents', [AgentController::class, 'listAgents']);
-        Route::post('/agents', [AgentController::class, 'store']);
-        Route::get('/agents/{id}', [AgentController::class, 'show']);
-        Route::put('/agents/{id}', [AgentController::class, 'updateAgent']);
-        Route::delete('/agents/{id}', [AgentController::class, 'destroyAgent']);
-    });
+    // Route::middleware(['auth:agent', 'agent.role:admin_agence,rh'])->group(function () {
+    //     Route::get('/agents', [AgentController::class, 'listAgents']);
+    //     Route::post('/agents', [AgentController::class, 'store']);
+    //     Route::get('/agents/{id}', [AgentController::class, 'show']);
+    //     Route::put('/agents/{id}', [AgentController::class, 'updateAgent']);
+    //     Route::delete('/agents/{id}', [AgentController::class, 'destroyAgent']);
+    // });
 
     /**
      * AGENT PERSONNEL : CRUD Logement, Contrat, Visit
+     * Uses normalized role values: agent (stored in DB)
      */
-    Route::middleware(['auth:agent', 'agent.role:personnel'])->group(function () {
+    Route::middleware(['auth:agent', 'agent.role:agent'])->group(function () {
 
         // Logement
         Route::apiResource('logements', LogementController::class);

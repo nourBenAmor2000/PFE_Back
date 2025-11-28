@@ -2,6 +2,13 @@
 
 return [
 
+    
+'openrouter' => [
+'key' => env('OPENROUTER_API_KEY'),
+'model' => env('OPENROUTER_MODEL', 'google/gemini-2.0-flash-lite-001'),
+],
+
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

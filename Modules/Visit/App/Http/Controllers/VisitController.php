@@ -8,14 +8,40 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use Modules\Visit\App\Models\Visit;
+use Illuminate\Support\Facades\Auth;
 
 class VisitController extends Controller
 {
     public function index(): JsonResponse
     {
+        $user = Auth::guard('admin')->user() 
+            ?? Auth::guard('agent')->user() 
+            ?? Auth::guard('client')->user();
+        
+        // Authorize with the actual user
+        if ($user) {
+            $this->authorizeForUser($user, 'viewAny', Visit::class);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized'
+            ], 401);
+        }
+        
+        // Scope based on user type
+        $query = Visit::query();
+        
+        if ($user instanceof \Modules\Agent\App\Models\Agent) {
+            $query->whereHas('logement', function($q) use ($user) {
+                $q->where('agency_id', $user->agency_id);
+            });
+        } elseif ($user instanceof \Modules\Client\App\Models\Client) {
+            $query->where('client_id', $user->_id);
+        }
+        
         return response()->json([
             'success' => true,
-            'visits'  => Visit::orderBy('visit_date', 'desc')->get(),
+            'visits'  => $query->with(['logement', 'client', 'agent'])->orderBy('visit_date', 'desc')->get(),
         ]);
     }
 
@@ -26,6 +52,8 @@ class VisitController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->authorize('create', Visit::class);
+        
         $v = $request->validate([
             'client_id'   => ['required','string','exists:clients,_id'],
             'logement_id' => ['required','string','exists:logements,_id'],
@@ -58,6 +86,8 @@ class VisitController extends Controller
         $visit = Visit::find($id);
         if (!$visit) return response()->json(['error'=>'Visite non trouvée'], 404);
 
+        $this->authorize('view', $visit);
+
         return response()->json(['success'=>true,'visit'=>$visit]);
     }
 
@@ -70,6 +100,8 @@ class VisitController extends Controller
     {
         $visit = Visit::find($id);
         if (!$visit) return response()->json(['error'=>'Visite non trouvée'], 404);
+
+        $this->authorize('update', $visit);
 
         $v = $request->validate([
             'client_id'   => ['sometimes','string','exists:clients,_id'],
@@ -107,6 +139,8 @@ class VisitController extends Controller
     {
         $visit = Visit::find($id);
         if (!$visit) return response()->json(['error'=>'Visite non trouvée'], 404);
+
+        $this->authorize('delete', $visit);
 
         $visit->delete();
 

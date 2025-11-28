@@ -24,8 +24,8 @@ class AgentServiceProvider extends ServiceProvider
         $this->registerConfig();
         $this->registerViews();
         $this->loadMigrationsFrom(module_path($this->moduleName, 'Database/migrations'));
-        // $router->aliasMiddleware('agent.role', EnsureAgentRole::class);
-         $this->app['router']->aliasMiddleware('agent.role', EnsureAgentRole::class);
+        // Middleware registered in app/Http/Kernel.php to avoid duplicates
+        // $this->app['router']->aliasMiddleware('agent.role', EnsureAgentRole::class);
     }
 
     /**

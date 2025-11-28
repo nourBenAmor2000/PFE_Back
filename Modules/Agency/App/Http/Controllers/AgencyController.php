@@ -20,13 +20,12 @@ class AgencyController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(): JsonResponse
-    {
-        return response()->json([
-            'success' => true,
-            'agencies' => Agency::all()
-        ]);
-    }
+   public function index()
+{
+    $agencies = Agency::select('_id as id', 'name')->get();
+
+    return response()->json($agencies);
+}
     /**
      * Show the form for creating a new resource.
      */

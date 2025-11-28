@@ -7,30 +7,26 @@ use Modules\Client\App\Http\Controllers\Auth\{
 };
 use Modules\Client\App\Http\Controllers\ClientController;
 
+
+
+Route::middleware('auth:client')->post('/me/avatar', [ClientController::class, 'updateAvatar']);
+
+
 Route::prefix('client')->group(function() {
-     Route::get('/clients', [ClientController::class, 'index']);   // Lister tous les clients
-    Route::post('/clients', [ClientController::class, 'store']);  // Créer un client
-    Route::get('/clients/{id}', [ClientController::class, 'show']); // Voir un client
-    Route::put('/clients/{id}', [ClientController::class, 'update']); // Modifier un client
-    Route::delete('/clients/{id}', [ClientController::class, 'destroy']); // Supprimer un client
-    // Public routes
+
+    // Auth public
     Route::post('/register', [ClientController::class, 'register']);
     Route::post('/login', [ClientController::class, 'login']);
-    
-    // Password reset routes
-    Route::post('/password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])
-         ->name('client.password.email');
-    Route::post('/password/reset', [ResetPasswordController::class, 'reset'])
-         ->name('client.password.update');
-    Route::get('/password/reset/{token}', function ($token) {
-        return response()->json(['token' => $token]);
-    })->name('client.password.reset');
 
-    Route::get('/client/reset-password/{token}', [PasswordResetController::class, 'showResetForm'])
-    ->name('client.password.reset');
+    // ✅ Mot de passe oublié (email de reset)
+    Route::post('/password/email', [ClientController::class, 'sendResetLinkEmail'])
+        ->name('client.password.email');
 
+    // ✅ Reset du mot de passe (form + token)
+    Route::post('/password/reset', [ClientController::class, 'resetPassword'])
+        ->name('client.password.update');
 
-    // Protected routes
+    // Routes protégées
     Route::middleware('auth:client')->group(function() {
         Route::get('/me', [ClientController::class, 'me']);
         Route::post('/logout', [ClientController::class, 'logout']);
@@ -38,13 +34,11 @@ Route::prefix('client')->group(function() {
         Route::get('/profile', [ClientController::class, 'showProfile']);
         Route::put('/profile/update', [ClientController::class, 'updateProfile']);
         Route::delete('/profile/delete', [ClientController::class, 'deleteProfile']);
-        
-        // Verification
+       
         Route::post('/email/resend', [VerificationController::class, 'resend'])
             ->name('client.verification.resend');
     });
-    
-    // Verification
+
     Route::get('/email/verify/{id}/{hash}', [VerificationController::class, 'verify'])
         ->middleware(['signed'])
         ->name('client.verification.verify');

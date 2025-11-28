@@ -31,4 +31,5 @@ class Visit extends Model
     {
         //return VisitFactory::new();
     }
+   
 }

@@ -4,6 +4,9 @@ namespace Modules\Contract\App\Models;
 use MongoDB\Laravel\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Contract\Database\factories\ContractFactory;
+use Modules\Client\App\Models\Client;
+use Modules\Logement\App\Models\Logement;
+use Modules\PaymentContracts\App\Models\PaymentContracts;
 
 class Contract extends Model
 {
@@ -24,7 +27,7 @@ class Contract extends Model
     ];
     public function payment()
     {
-        return $this->hasOne(PaymentContract::class, 'contract_id', '_id');
+        return $this->hasOne(PaymentContracts::class, 'contract_id', '_id');
     }
 
     public function client()

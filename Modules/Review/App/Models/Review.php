@@ -5,6 +5,8 @@ namespace Modules\Review\App\Models;
 use MongoDB\Laravel\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Review\Database\factories\ReviewFactory;
+use Modules\Client\App\Models\Client;
+use Modules\Logement\App\Models\Logement;
 
 class Review extends Model
 {

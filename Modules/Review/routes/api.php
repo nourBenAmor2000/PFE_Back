@@ -14,7 +14,11 @@ use Modules\Review\App\Http\Controllers\ReviewController;
     | is assigned the "api" middleware group. Enjoy building your API!
     |
 */
-Route::apiResource('reviews', ReviewController::class);
+// Route::apiResource('reviews', ReviewController::class);
+// Protected routes - require authentication and appropriate role
+Route::middleware(['auth:admin,agent,client'])->group(function () {
+    Route::apiResource('reviews', ReviewController::class);
+});
 
 // Route::middleware(['auth:sanctum'])->prefix('v1')->name('api.')->group(function () {
 //     Route::get('review', fn (Request $request) => $request->user())->name('review');

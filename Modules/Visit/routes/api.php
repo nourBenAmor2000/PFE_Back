@@ -1,21 +1,27 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Modules\Visit\App\Http\Controllers\VisitController;
 
-Route::apiResource('visits', VisitController::class);
 /*
-    |--------------------------------------------------------------------------
-    | API Routes
-    |--------------------------------------------------------------------------
-    |
-    | Here is where you can register API routes for your application. These
-    | routes are loaded by the RouteServiceProvider within a group which
-    | is assigned the "api" middleware group. Enjoy building your API!
-    |
+|--------------------------------------------------------------------------
+| Routes VISITS
+|--------------------------------------------------------------------------
+|
+| - Admin global : CRUD complet sur toutes les visites
+| - Admin d'agence : lecture seule, filtrée par son agence
+|
 */
 
-// Route::middleware(['auth:sanctum'])->prefix('v1')->name('api.')->group(function () {
-//     Route::get('visit', fn (Request $request) => $request->user())->name('visit');
-// });
+// 🔹 Admin global : full CRUD sur toutes les visites
+Route::middleware(['auth:admin', 'admin.role:admin_global'])->group(function () {
+    Route::apiResource('visits', VisitController::class);
+});
+
+// 🔹 Admin d'agence : lecture seule, visites filtrées par agence
+Route::middleware(['auth:agent', 'agent.role:admin_agence'])->group(function () {
+    // index filtré par agence
+    Route::get('visits', [VisitController::class, 'indexByAgency']);
+    // détail sécurisé (vérifie que la visite appartient bien à l’agence)
+    Route::get('visits/{visit}', [VisitController::class, 'showScoped']);
+});

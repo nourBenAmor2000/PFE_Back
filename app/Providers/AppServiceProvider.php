@@ -3,8 +3,6 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Auth\Notifications\VerifyEmail;
-use Illuminate\Notifications\Messages\MailMessage;
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -12,7 +10,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(\App\Contracts\AIAssistantContract::class, \App\Services\Assistant\AIAssistant::class);
     }
 
     /**
@@ -20,12 +18,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        VerifyEmail::toMailUsing(function ($notifiable, $url) {
-            return (new MailMessage)
-                ->subject('Verify Email Address')
-                ->line('Please click the button below to verify your email address.')
-                ->action('Verify Email Address', $url);
-        });
+        // NOTE: VerifyEmail::toMailUsing() removed to prevent automatic email sending
+        // We use custom notifications (VerifyEmail in modules) that are sent manually
+        // in the registration controllers. This ensures only ONE email is sent.
         
     }
 }
+

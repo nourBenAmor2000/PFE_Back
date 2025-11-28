@@ -16,8 +16,13 @@ use Modules\Contract\App\Http\Controllers\ContractController;
 */
 
 
-Route::apiResource('contracts', ContractController::class);
+// Route::apiResource('contracts', ContractController::class);
 
+
+// Protected routes - require authentication and appropriate role
+Route::middleware(['auth:admin,agent,client'])->group(function () {
+    Route::apiResource('contracts', ContractController::class);
+});
 
 // Route::middleware(['auth:sanctum'])->prefix('v1')->name('api.')->group(function () {
 //     Route::get('contract', fn (Request $request) => $request->user())->name('contract');

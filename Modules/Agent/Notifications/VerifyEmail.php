@@ -20,14 +20,30 @@ class VerifyEmail extends Notification implements ShouldQueue
 
     public function toMail(Agent $notifiable): MailMessage
     {
-        $verificationUrl = URL::temporarySignedRoute(
+        $frontendUrl = config('app.frontend_url', config('app.url'));
+        $id = $notifiable->getKey();
+        $hash = sha1($notifiable->getEmailForVerification());
+        
+        // Generate signed URL for backend verification, but redirect to frontend
+        $signedUrl = URL::temporarySignedRoute(
             'agent.verification.verify',
             now()->addMinutes(config('auth.verification.expire', 60)),
             [
-                'id' => $notifiable->getKey(),
-                'hash' => sha1($notifiable->getEmailForVerification()),
+                'id' => $id,
+                'hash' => $hash,
             ]
         );
+        
+        // Extract signature from signed URL
+        $parsedUrl = parse_url($signedUrl);
+        parse_str($parsedUrl['query'] ?? '', $queryParams);
+        $signature = $queryParams['signature'] ?? '';
+        $expires = $queryParams['expires'] ?? '';
+        
+        // Build frontend URL with all necessary parameters
+        $verificationUrl = $frontendUrl . '/verify-email/' . $id . '/' . $hash . 
+                          '?type=agent&signature=' . urlencode($signature) . 
+                          '&expires=' . urlencode($expires);
 
         return (new MailMessage)
             ->subject('Vérification de votre email Agent')
