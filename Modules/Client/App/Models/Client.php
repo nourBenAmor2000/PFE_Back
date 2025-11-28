@@ -23,7 +23,7 @@ class Client extends Authenticatable implements JWTSubject, MustVerifyEmail, Can
     /**
      * The attributes that are mass assignable.
      */
-    protected $fillable = ['name', 'username', 'email', 'password', 'phone','role', 'verification_code', 'verification_code_expires_at'];
+    protected $fillable = ['name', 'username', 'email', 'password', 'phone','role', 'verification_code', 'verification_code_expires_at', 'avatar',];
     protected $casts = ['_id' => 'string', 'verification_code_expires_at' => 'datetime'];
     protected $hidden = ['password', 'remember_token', 'verification_code'];
     public const ROLE_Client = 'Client';

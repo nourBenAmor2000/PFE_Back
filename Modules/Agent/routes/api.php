@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Agent\App\Http\Controllers\AgentController;
+use Modules\Logement\App\Http\Controllers\LogementController;
 // Public route to get agencies list (for registration)
 // Vérification email agent par code (PUBLIC)
 Route::post('/agent/verify-code', [AgentController::class, 'verifyCode']);

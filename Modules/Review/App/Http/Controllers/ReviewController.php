@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 use Modules\Review\App\Models\Review;
 
 class ReviewController extends Controller
@@ -16,9 +17,28 @@ class ReviewController extends Controller
      */
     public function index(): JsonResponse
     {
+        $user = Auth::guard('admin')->user() 
+            ?? Auth::guard('agent')->user() 
+            ?? Auth::guard('client')->user();
+        
+        // Scope based on user type
+        $query = Review::query();
+        
+        // Clients can only see their own reviews
+        if ($user instanceof \Modules\Client\App\Models\Client) {
+            $query->where('client_id', $user->_id);
+        }
+        // Agents can see reviews for their agency's properties
+        elseif ($user instanceof \Modules\Agent\App\Models\Agent) {
+            $query->whereHas('logement', function($q) use ($user) {
+                $q->where('agency_id', $user->agency_id);
+            });
+        }
+        // Admins can see all
+        
         return response()->json([
             'success' => true,
-            'reviews' => Review::orderBy('created_at', 'desc')->get(),
+            'reviews' => $query->with(['client', 'logement', 'agent'])->orderBy('created_at', 'desc')->get(),
         ]);
     }
 

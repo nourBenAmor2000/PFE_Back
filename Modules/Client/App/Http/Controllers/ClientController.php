@@ -17,6 +17,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 class ClientController extends Controller
 {
     /**
@@ -158,31 +159,39 @@ class ClientController extends Controller
         return response()->json(['success' => true, 'client' => $client]);
     }
     
-    public function updateProfile(Request $request): JsonResponse
-    {
-        $client = Auth::guard('client')->user();
-    
-        if (!$client) {
-            return response()->json(['success' => false, 'message' => 'Client non trouvé'], 404);
-        }
-    
-        $validatedData = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'username' => 'sometimes|string|max:255|unique:clients,username,' . $client->_id,
-            'email' => 'sometimes|string|email|max:255|unique:clients,email,' . $client->_id,
-            'password' => 'sometimes|string|min:8',
-            'phone' => 'nullable|string|max:20',
-        ]);
-    
-        if (!empty($validatedData['password'])) {
-            $validatedData['password'] = Hash::make($validatedData['password']);
-        }
-    
-        $client->update($validatedData);
-    
-        return response()->json(['success' => true, 'message' => 'Profil mis à jour avec succès', 'client' => $client]);
+   public function updateProfile(Request $request): JsonResponse
+{
+    $client = Auth::guard('client')->user();
+
+    if (!$client) {
+        return response()->json(['success' => false, 'message' => 'Client non trouvé'], 404);
     }
-    
+
+    $validatedData = $request->validate([
+        'name' => 'sometimes|string|max:255',
+        // 🔹 Ignorer le client courant via la colonne _id
+        'username' => 'sometimes|string|max:255|unique:clients,username,' . $client->_id . ',_id',
+        'email'    => 'sometimes|string|email|max:255|unique:clients,email,' . $client->_id . ',_id',
+        // 🔹 nullable -> autorise vide
+        'password' => 'nullable|string|min:8',
+        'phone'    => 'nullable|string|max:20',
+    ]);
+
+    if (!empty($validatedData['password'])) {
+        $validatedData['password'] = Hash::make($validatedData['password']);
+    } else {
+        unset($validatedData['password']); // ne pas écraser par vide
+    }
+
+    $client->update($validatedData);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Profil mis à jour avec succès',
+        'client'  => $client
+    ]);
+}
+
     public function deleteProfile(): JsonResponse
     {
         $client = Auth::guard('client')->user();
@@ -420,5 +429,65 @@ public function sendResetLinkEmail(Request $request): JsonResponse
      * Appliquer le nouveau mot de passe (client)
      */
     
+
+
+public function updateAvatar(Request $request): JsonResponse
+{
+    try {
+        // 🔹 Récupérer le client authentifié via le guard "client"
+        $client = Auth::guard('client')->user();
+        // ou bien : $client = $request->user('client');
+
+        if (!$client) {
+            return response()->json(['success' => false, 'message' => 'Non authentifié'], 401);
+        }
+
+        // 🔹 Validation de l'image
+        $validated = $request->validate([
+            'avatar' => 'required|image|mimes:jpg,jpeg,png,webp|max:3072', // 3 Mo
+        ]);
+
+        $file = $validated['avatar'];
+
+        // 🔹 Supprimer l'ancien avatar local (optionnel)
+        if (!empty($client->avatar) && str_starts_with($client->avatar, 'storage/')) {
+            $oldPath = str_replace('storage/', '', $client->avatar);
+            if (Storage::disk('public')->exists($oldPath)) {
+                Storage::disk('public')->delete($oldPath);
+            }
+        }
+
+        // 🔹 Stockage du nouveau fichier dans storage/app/public/avatars
+        $path = $file->store('avatars', 'public'); // ex: avatars/abc123.png
+
+        // 🔹 URL publique => nécessite `php artisan storage:link`
+        $url = asset('storage/' . $path);
+
+        // 🔹 Mettre à jour la colonne "avatar" (pas avatar_url)
+        $client->avatar = $url;
+        $client->save();
+
+        return response()->json([
+            'success' => true,
+            'avatar'  => $url,
+        ], 200);
+
+    } catch (ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Image invalide.',
+            'errors'  => $e->errors(),
+        ], 422);
+    } catch (\Throwable $e) {
+        Log::error('Erreur upload avatar : ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur serveur lors de la mise à jour de l’avatar.',
+            'error'   => $e->getMessage(), // tu pourras enlever ça en prod
+        ], 500);
+    }}
 }
 

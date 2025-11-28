@@ -5,6 +5,7 @@ namespace Modules\Logement\App\Models;
 use MongoDB\Laravel\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Logement\Database\factories\LogementFactory;
+use Modules\Agency\App\Models\Agency; // ou le bon namespace de ton modèle Agency
 
 class Logement extends Model
 {
@@ -14,12 +15,14 @@ class Logement extends Model
     /**
      * The attributes that are mass assignable.
      */
+    
     protected $fillable = [
-    'title','description', 'price', 'category_id', 'agency_id', 'latitude', 'longitude', 'location', 'surface', 'floor', 'free'
+    'title','description', 'price', 'category_id', 'agency_id', 'latitude', 'longitude', 'location', 'surface', 'floor', 'free'     , 'image',     // ✅ nouvelle colonne
+        'images',    // ✅ optionnel: tableau de photos
     ];
     
     protected $casts = [
-        '_id' => 'string', 'category_id' => 'string', 'agency_id' => 'string', 'free' => 'boolean'
+        '_id' => 'string', 'category_id' => 'string', 'agency_id' => 'string', 'free' => 'boolean',      'images'     => 'array',   // ✅ on cast en array
     ];
     
     public function attributes()

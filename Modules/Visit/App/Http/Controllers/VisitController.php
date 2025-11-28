@@ -18,7 +18,15 @@ class VisitController extends Controller
             ?? Auth::guard('agent')->user() 
             ?? Auth::guard('client')->user();
         
-        $this->authorize('viewAny', Visit::class);
+        // Authorize with the actual user
+        if ($user) {
+            $this->authorizeForUser($user, 'viewAny', Visit::class);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized'
+            ], 401);
+        }
         
         // Scope based on user type
         $query = Visit::query();
@@ -33,7 +41,7 @@ class VisitController extends Controller
         
         return response()->json([
             'success' => true,
-            'visits'  => $query->orderBy('visit_date', 'desc')->get(),
+            'visits'  => $query->with(['logement', 'client', 'agent'])->orderBy('visit_date', 'desc')->get(),
         ]);
     }
 

@@ -31,15 +31,64 @@ final class QueryInterpreter
         // 1) Tentative via LLM avec prompt amélioré
         try {
             $system = <<<PROMPT
-Tu es un expert en extraction d'intent pour un système de gestion immobilière.
+Tu es un expert en extraction d'intent pour un système de gestion immobilière (E-DAR).
 Analyse la requête utilisateur et extrais un intent JSON structuré.
 
-Entités possibles: visit, logement, client, contrat, payment, review, agency, analytics, agent, category
-Types possibles: list, count, find, analyze, compare, aggregate
-Timeframes: today, week, month, year, all
-Filtres: status, price_min, price_max, city, agency_id, category_id, rating_min, rating_max, free
+ENTITÉS POSSIBLES:
+- visit, visits: visites immobilières
+- logement, logements, property, properties: propriétés/logements
+- client, clients, customer: clients
+- contrat, contrats, contract, contracts: contrats de location
+- payment, payments, paiement, paiements: paiements et transactions
+- review, reviews, avis: avis et évaluations
+- agency, agencies, agence, agences: agences immobilières
+- agent, agents: agents immobiliers
+- category, categories, categorie, categories: catégories de logements
+- analytics, analyse, statistiques, stats: analyses et statistiques globales
 
-Retourne UNIQUEMENT un JSON valide avec: {type, entity, filters, timeframe, aggregation, action}
+TYPES POSSIBLES:
+- list: lister des éléments
+- count: compter des éléments
+- find: trouver/rechercher
+- analyze: analyser en profondeur
+- compare: comparer
+- aggregate: agrégation de données
+
+TIMEFRAMES:
+- today: aujourd'hui
+- week: cette semaine / 7 derniers jours
+- month: ce mois / 30 derniers jours
+- quarter: ce trimestre
+- year: cette année
+- all: toutes périodes
+
+FILTRES POSSIBLES:
+- status: statut (active, inactive, pending, etc.)
+- price_min, price_max: fourchette de prix
+- city: ville
+- agency_id: ID d'agence
+- category_id: ID de catégorie
+- rating_min, rating_max: fourchette de notes
+- free: disponibilité (true/false)
+
+ACTIONS SPÉCIALES:
+- expiring_next_30d: contrats expirant dans 30 jours
+- signed_this_month: contrats signés ce mois
+- pending_signature: contrats en attente de signature
+- top_performers: meilleurs éléments
+- low_performance: éléments sous-performants
+
+IMPORTANT:
+- Détecte le contexte et l'intention réelle de la question
+- Extrais les filtres implicites (ex: "logements disponibles" → free: true)
+- Identifie les timeframes même s'ils ne sont pas explicites
+- Pour les questions analytiques, utilise type: "analyze" et entity: "analytics"
+- Retourne UNIQUEMENT un JSON valide avec: {type, entity, filters, timeframe, aggregation, action, confidence}
+
+EXEMPLES:
+- "Combien de logements disponibles?" → {type: "count", entity: "logement", filters: {free: true}}
+- "Statistiques globales ce mois" → {type: "analyze", entity: "analytics", timeframe: "month"}
+- "Contrats expirant bientôt" → {type: "list", entity: "contrat", action: "expiring_next_30d"}
 PROMPT;
             
             $user = "Analyse cette requête et retourne uniquement un JSON:\n\nRequête: \"{$userQuery}\"\n\nJSON:";
@@ -173,11 +222,21 @@ PROMPT;
 
         // --- Entity detection améliorée avec priorité ---
         $entity = 'logement';
-        if ((str_contains($t, 'agence') || str_contains($t, 'agency')) && 
-    (str_contains($t, 'performance') || str_contains($t, 'performant'))) {
-    $entity = 'agency';
-    $type = 'analyze'; // Force analyze type for performance queries
-}
+        
+        // Analytics/Stats en priorité absolue
+        if (str_contains($t, 'statistique') || str_contains($t, 'analyse') || str_contains($t, 'analytics') || 
+            str_contains($t, 'revenu') || str_contains($t, 'revenue') || str_contains($t, 'performance') || 
+            str_contains($t, 'conversion') || str_contains($t, 'marché') || str_contains($t, 'market') || 
+            str_contains($t, 'overview') || str_contains($t, 'global') || str_contains($t, 'dashboard') ||
+            str_contains($t, 'rapport') || str_contains($t, 'report') || str_contains($t, 'kpi') ||
+            str_contains($t, 'indicateur') || str_contains($t, 'métrique') || str_contains($t, 'metric')) {
+            $entity = 'analytics';
+            $type = 'analyze';
+        } elseif ((str_contains($t, 'agence') || str_contains($t, 'agency')) && 
+            (str_contains($t, 'performance') || str_contains($t, 'performant') || str_contains($t, 'meilleur'))) {
+            $entity = 'agency';
+            $type = 'analyze';
+        }
         // Analytics/Stats en priorité
         if (str_contains($t, 'statistique') || str_contains($t, 'analyse') || str_contains($t, 'analytics') || 
             str_contains($t, 'revenu') || str_contains($t, 'revenue') || str_contains($t, 'performance') || 

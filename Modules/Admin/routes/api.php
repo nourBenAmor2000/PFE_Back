@@ -36,6 +36,15 @@ Route::prefix('admin')->group(function () {
         Route::post('/email/resend', [VerificationController::class, 'resend'])
             ->name('admin.verification.resend');
     
+
+// ✅✅✅ ICI : CRUD ADMINS pour ton useAdmins.js
+        Route::get(   'admins',       [AdminController::class, 'adminsIndex']);
+        Route::post(  'admins',       [AdminController::class, 'adminsStore']);
+        Route::get(   'admins/{id}',  [AdminController::class, 'adminsShow']);
+        Route::put(   'admins/{id}',  [AdminController::class, 'adminsUpdate']);
+        Route::delete('admins/{id}',  [AdminController::class, 'adminsDestroy']);
+
+
         // =========================
         // CRUD Agency (réservé GLOBAL, checké dans le controller)
         // =========================

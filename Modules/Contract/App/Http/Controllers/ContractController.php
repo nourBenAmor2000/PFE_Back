@@ -9,6 +9,7 @@ use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Modules\Contract\App\Models\Contract;
 
 class ContractController extends Controller
@@ -18,9 +19,34 @@ class ContractController extends Controller
      */
     public function index(): JsonResponse
     {
+        $user = Auth::guard('admin')->user() 
+            ?? Auth::guard('agent')->user() 
+            ?? Auth::guard('client')->user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized'
+            ], 401);
+        }
+        
+        // Scope based on user type
+        $query = Contract::query();
+        
+        // Clients can only see their own contracts
+        if ($user instanceof \Modules\Client\App\Models\Client) {
+            $query->where('client_id', $user->_id);
+        }
+        // Agents can see contracts for their agency's properties
+        elseif ($user instanceof \Modules\Agent\App\Models\Agent) {
+            $query->whereHas('logement', function($q) use ($user) {
+                $q->where('agency_id', $user->agency_id);
+            });
+        }
+        
         return response()->json([
             'success'   => true,
-            'contracts' => Contract::orderBy('start_date', 'desc')->get(),
+            'contracts' => $query->with(['logement', 'client', 'agent'])->orderBy('start_date', 'desc')->get(),
         ]);
     }
 

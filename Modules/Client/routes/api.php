@@ -9,8 +9,7 @@ use Modules\Client\App\Http\Controllers\ClientController;
 
 
 
-
-
+Route::middleware('auth:client')->post('/me/avatar', [ClientController::class, 'updateAvatar']);
 
 
 Route::prefix('client')->group(function() {
@@ -35,7 +34,7 @@ Route::prefix('client')->group(function() {
         Route::get('/profile', [ClientController::class, 'showProfile']);
         Route::put('/profile/update', [ClientController::class, 'updateProfile']);
         Route::delete('/profile/delete', [ClientController::class, 'deleteProfile']);
-
+       
         Route::post('/email/resend', [VerificationController::class, 'resend'])
             ->name('client.verification.resend');
     });

@@ -20,7 +20,7 @@ use Modules\Contract\App\Http\Controllers\ContractController;
 
 
 // Protected routes - require authentication and appropriate role
-Route::middleware(['auth:admin,agent'])->group(function () {
+Route::middleware(['auth:admin,agent,client'])->group(function () {
     Route::apiResource('contracts', ContractController::class);
 });
 

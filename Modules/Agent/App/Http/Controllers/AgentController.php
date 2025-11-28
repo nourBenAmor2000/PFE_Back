@@ -341,7 +341,10 @@ public function verifyCode(Request $request): JsonResponse
     {
         $user = Auth::guard('agent')->user();
         $agents = Agent::where('agency_id', $user->agency_id)->get();
-        return response()->json(['agents' => $agents]);
+        return response()->json([
+            'success' => true,
+            'agents' => $agents
+        ]);
     }
 
     public function show($id): JsonResponse
@@ -352,34 +355,86 @@ public function verifyCode(Request $request): JsonResponse
             ->first();
 
         if (!$agent) {
-            return response()->json(['error' => 'Agent non trouvé'], 404);
+            return response()->json([
+                'success' => false,
+                'error' => 'Agent non trouvé'
+            ], 404);
         }
 
-        return response()->json(['agent' => $agent]);
+        return response()->json([
+            'success' => true,
+            'agent' => $agent
+        ]);
     }
 
     public function store(Request $request): JsonResponse
     {
-        $admin = Auth::guard('agent')->user();
+        try {
+            $admin = Auth::guard('agent')->user();
+            
+            if (!$admin) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Non authentifié',
+                    'message' => 'Vous devez être connecté pour créer un agent'
+                ], 401);
+            }
+            
+            // Log for debugging
+            \Log::info('Creating agent', [
+                'admin_id' => $admin->_id,
+                'admin_role' => $admin->role,
+                'agency_id' => $admin->agency_id
+            ]);
 
-        $request->validate([
+            $validated = $request->validate([
             'name' => 'required|string',
             'email' => 'required|email|unique:agents,email',
             'password' => 'required|string|min:8|confirmed',
             'phone' => 'nullable|string',
-            'role' => 'required|in:' . implode(',', [Agent::ROLE_ADMIN, Agent::ROLE_RH, Agent::ROLE_AGENT]),
+            'role' => 'required|in:' . implode(',', [Agent::ROLE_AGENT, Agent::ROLE_RH, 'agent', 'rh']), // Allow both 'agent' and ROLE_AGENT
         ]);
 
         $agent = Agent::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'phone' => $request->phone,
-            'role' => $request->role,
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'phone' => $validated['phone'] ?? null,
+            'role' => $validated['role'],
             'agency_id' => $admin->agency_id
         ]);
 
-        return response()->json(['message' => 'Agent créé', 'agent' => $agent]);
+        \Log::info('Agent created successfully', [
+            'agent_id' => $agent->_id,
+            'admin_id' => $admin->_id
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Agent créé avec succès',
+            'agent' => $agent
+        ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation error creating agent', [
+                'errors' => $e->errors()
+            ]);
+            return response()->json([
+                'success' => false,
+                'error' => 'Erreur de validation',
+                'message' => $e->getMessage(),
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Error creating agent', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'error' => 'Erreur lors de la création de l\'agent',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function updateAgent(Request $request, $id): JsonResponse

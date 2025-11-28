@@ -9,7 +9,11 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 use Modules\Logement\App\Models\Logement;
+use Modules\Agency\App\Models\Agency;
+
+use Modules\Category\App\Models\Category;
 
 
 class LogementController extends Controller
@@ -20,6 +24,16 @@ class LogementController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Logement::query();
+
+        // Auto-filter by agency_id for agents
+        $user = Auth::guard('admin')->user() 
+            ?? Auth::guard('agent')->user() 
+            ?? Auth::guard('client')->user();
+        
+        if ($user instanceof \Modules\Agent\App\Models\Agent && $user->agency_id) {
+            // Agents automatically see only their agency's properties
+            $query->where('agency_id', $user->agency_id);
+        }
 
         // Search filters
         if ($request->filled('search')) {
@@ -164,17 +178,38 @@ class LogementController extends Controller
 
         $logements = $query->whereNotNull('latitude')
                           ->whereNotNull('longitude')
+                          ->where('latitude', '!=', 0)
+                          ->where('longitude', '!=', 0)
+                          ->with(['agency:id,name', 'category:id,name'])
                           ->get()
                           ->map(function($logement) {
                               return [
                                   'id' => $logement->_id,
+                                  '_id' => $logement->_id,
                                   'title' => $logement->title,
                                   'address' => $logement->location ?? '',
-                                  'price' => $logement->price,
-                                  'lat' => $logement->latitude,
-                                  'lng' => $logement->longitude,
+                                  'location' => $logement->location ?? '',
+                                  'price' => $logement->price ?? 0,
+                                  'lat' => (float)$logement->latitude,
+                                  'lng' => (float)$logement->longitude,
+                                  'latitude' => (float)$logement->latitude,
+                                  'longitude' => (float)$logement->longitude,
                                   'image' => $logement->image ?? null,
+                                  'mainImage' => $logement->image ?? null,
+                                  'coverImage' => $logement->image ?? null,
+                                  'beds' => $logement->beds ?? $logement->chambres ?? 0,
+                                  'baths' => $logement->baths ?? $logement->sallesDeBain ?? 0,
+                                  'surface' => $logement->surface ?? 0,
                                   'free' => $logement->free ?? true,
+                                  'type' => $logement->type ?? 'house',
+                                  'category' => $logement->category ? [
+                                      'id' => $logement->category->_id,
+                                      'name' => $logement->category->name,
+                                  ] : null,
+                                  'agency' => $logement->agency ? [
+                                      'id' => $logement->agency->_id,
+                                      'name' => $logement->agency->name,
+                                  ] : null,
                               ];
                           });
 
@@ -253,50 +288,181 @@ class LogementController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'title'       => ['required','string','max:255'],
-            'description' => ['nullable','string'],
-            'price'       => ['required','numeric','min:0'],
-            'category_id' => ['required','string','exists:categorys,_id'], // ton modèle Category => table 'categorys'
-            'agency_id'   => ['required','string','exists:agencies,_id'],
-            'latitude'    => ['nullable','numeric','between:-90,90'],
-            'longitude'   => ['nullable','numeric','between:-180,180'],
-            'location'    => ['nullable','string','max:255'],
-            'surface'     => ['nullable','integer','min:0'],
-            'floor'       => ['nullable','integer'],
-            'free'        => ['sometimes','boolean'],
-        ]);
+  public function store(Request $request): JsonResponse
+{
+    // 1) Validation de base
+    $validated = $request->validate([
+        'title'       => ['required','string','max:255'],
+        'description' => ['nullable','string'],
+        'price'       => ['required','numeric','min:0'],
 
-        // par défaut, libre
-        if (!array_key_exists('free', $validated)) {
-            $validated['free'] = true;
-        }
+        // ⚠️ on ne met plus de "exists" ici
+        'category_id' => ['required','string'],
+        'agency_id'   => ['required','string'],
 
-        $logement = Logement::create($validated);
+        'latitude'    => ['nullable','numeric','between:-90,90'],
+        'longitude'   => ['nullable','numeric','between:-180,180'],
+        'location'    => ['nullable','string','max:255'],
+        'surface'     => ['nullable','integer','min:0'],
+        'floor'       => ['nullable','integer'],
+        'free'        => ['sometimes','boolean'],
+        
+        // ✅ nouveaux champs image
+        'image'       => ['nullable','string','max:1000'],
+        'images'      => ['nullable','array'],
+        'images.*'    => ['nullable','string','max:1000'],
+    ]);
 
+    // 2) Vérifier manuellement que l'agence existe dans MongoDB
+    $agency = Agency::where('_id', $validated['agency_id'])->first();
+    if (!$agency) {
         return response()->json([
-            'success'  => true,
-            'message'  => 'Logement créé avec succès',
-            'logement' => $logement,
-        ], 201);
+            'message' => 'The selected agency id is invalid.',
+            'errors'  => [
+                'agency_id' => ['The selected agency id is invalid.'],
+            ],
+        ], 422);
     }
 
+    // 3) Vérifier manuellement que la catégorie existe (si tu as le module Category)
+    $category = Category::where('_id', $validated['category_id'])->first();
+    if (!$category) {
+        return response()->json([
+            'message' => 'The selected category id is invalid.',
+            'errors'  => [
+                'category_id' => ['The selected category id is invalid.'],
+            ],
+        ], 422);
+    }
+
+    // 4) Par défaut, le logement est libre
+    if (!array_key_exists('free', $validated)) {
+        $validated['free'] = true;
+    }
+
+    // 5) (Optionnel) si pas de lat/lng mais une adresse, on géocode
+    if (
+        (!isset($validated['latitude']) || !isset($validated['longitude']))
+        && $request->filled('location')
+    ) {
+        $geo = app(GeocodingService::class)->geocode($request->input('location'));
+        if ($geo) {
+            $validated['latitude']  = $geo['lat'];
+            $validated['longitude'] = $geo['lng'];
+        }
+    }
+
+    // 6) Création du logement
+    $logement = Logement::create($validated);
+
+    return response()->json([
+        'success'  => true,
+        'message'  => 'Logement créé avec succès',
+        'logement' => $logement,
+    ], 201);
+}
     /**
      * Display the specified resource.
      */
     public function show(string $id): JsonResponse
     {
-        $logement = Logement::find($id);
-        if (!$logement) {
-            return response()->json(['error' => 'Logement non trouvé'], 404);
-        }
+        try {
+            // Try to find by _id (MongoDB format) or id
+            $logement = Logement::where('_id', $id)->first();
+            
+            // If not found by _id, try to find by id field (if exists)
+            if (!$logement) {
+                $logement = Logement::where('id', $id)->first();
+            }
+            
+            if (!$logement) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Logement non trouvé',
+                    'message' => 'Le logement avec l\'ID ' . $id . ' n\'existe pas.'
+                ], 404);
+            }
 
-        return response()->json([
-            'success'  => true,
-            'logement' => $logement, // tu peux faire ->load('agency','category') si tu veux
-        ]);
+            // Load relationships manually to avoid namespace resolution issues
+            $agency = null;
+            if ($logement->agency_id) {
+                $agencyModel = \Modules\Agency\App\Models\Agency::find($logement->agency_id);
+                if ($agencyModel) {
+                    $agency = [
+                        '_id' => $agencyModel->_id,
+                        'id' => $agencyModel->_id,
+                        'name' => $agencyModel->name ?? null,
+                        'city' => $agencyModel->city ?? null,
+                        'address' => $agencyModel->address ?? null,
+                        'phone' => $agencyModel->phone ?? null,
+                        'email' => $agencyModel->email ?? null,
+                        'location' => $agencyModel->location ?? null,
+                    ];
+                }
+            }
+
+            $category = null;
+            if ($logement->category_id) {
+                $categoryModel = \Modules\Category\App\Models\Category::find($logement->category_id);
+                if ($categoryModel) {
+                    $category = [
+                        '_id' => $categoryModel->_id,
+                        'id' => $categoryModel->_id,
+                        'name' => $categoryModel->name ?? null,
+                        'description' => $categoryModel->description ?? null,
+                    ];
+                }
+            }
+
+            // Format the response with all necessary data
+            $formattedLogement = [
+                '_id' => $logement->_id,
+                'id' => $logement->_id, // Also include as 'id' for frontend compatibility
+                'title' => $logement->title,
+                'description' => $logement->description ?? '',
+                'price' => $logement->price ?? 0,
+                'location' => $logement->location ?? '',
+                'address' => $logement->location ?? '', // Alias for frontend compatibility
+                'latitude' => $logement->latitude ?? null,
+                'longitude' => $logement->longitude ?? null,
+                'surface' => $logement->surface ?? null,
+                'floor' => $logement->floor ?? null,
+                'free' => $logement->free ?? true,
+                'image' => $logement->image ?? null,
+                'mainImage' => $logement->image ?? null, // Alias for frontend compatibility
+                'gallery' => $logement->gallery ?? ($logement->image ? [$logement->image] : []),
+                'beds' => $logement->beds ?? null,
+                'baths' => $logement->baths ?? null,
+                'category' => $category,
+                'agency' => $agency,
+                'agent' => null, // Can be populated if you have agent relationship
+                'features' => $logement->features ?? [],
+                'type' => $logement->type ?? 'house',
+                'chambres' => $logement->chambres ?? $logement->beds ?? null,
+                'sallesDeBain' => $logement->sallesDeBain ?? $logement->baths ?? null,
+                'images' => is_array($logement->images) ? $logement->images : ($logement->image ? [$logement->image] : []),
+                'photos' => is_array($logement->photos) ? $logement->photos : ($logement->image ? [$logement->image] : []),
+                'created_at' => $logement->created_at ?? null,
+                'updated_at' => $logement->updated_at ?? null,
+            ];
+
+            return response()->json([
+                'success' => true,
+                'logement' => $formattedLogement,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('LogementController.show error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'id' => $id,
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Erreur lors de la récupération du logement',
+                'message' => config('app.debug') ? $e->getMessage() : 'Erreur serveur'
+            ], 500);
+        }
     }
 
     /**
